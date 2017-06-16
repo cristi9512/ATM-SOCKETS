@@ -1,0 +1,112 @@
++-----------------------------------------------------------------------------+
+|-----------------------------------------------------------------------------|
+|-----------------------------------------------------------------------------|
+|-------------------- SISTEM MONETAR DE TIP BANCOMAT -------------------------|
+|-----------------------------------------------------------------------------|
++-----------------------------------------------------------------------------+
+
+
+	Dupa deschiderea socketului prin intermediul caruia va comunica, clientul 
+va astepta comenzile primite de la tastatura pentru a le trimite mai departe 
+catre server (modul in care aceste comenzi sunt realizate va fi prezentat 
+ulterior). Clientul va primi ca parametri adresa IP a serverului(pentru testarea 
+pe masina locala vom folosi 127.0.0.1 sau INADDR_LOOPBACK) si portul pe care 
+trebuie sa se conecteze.
+	Inainte de inceperea comunicarii propriu-zise cu clientii, serverul va 
+deschide socketul pentru comunicare si va citi datele aflate in fisierul de 
+intrare. Fiecare linie din fisierul de intrare va contine caracteristicile 
+unui user: nume, prenume, numar card, cod pin, parola, si sold. Toti userii 
+din acest fisier vor fi memorati intr-o structura de date (vector) pentru a avea 
+acces la ei. Structura de date este reprezentata de variabila globala usersList. 
+Aceasta poate fi comparata cu o baza de date a bancii de care apartine bancomatul.
+	De asemenea, serverul detine si cateva metode capabile sa gaseasca un user 
+in lista de useri aflati in fisierul de intrare (in functie de numarul cardului) 
+sau sa gaseasca un user in lista de useri logati pe server la un moment dat, 
+in functie de numarul socketului. Portul prin care acesta comunica va fi preluat 
+din parametrii cu care se apeleaza programul. Folosirea INADDR_ANY semnifica 
+faptul ca vor fi acceptate conexiuni de la orice adresa IP. AF_INET reprezinta 
+familia de adrese si semnifica faptul ca adresele vor fi de tip internet. Serverul 
+va apela functia listen pentru a "asculta" cererile ce provin de la clienti. 
+Parametrul MAX_CLIENTS reprezinta numarul maxim de conexiuni ce sunt acceptate 
+in coada de asteptare.
+	Atat in cadrul clientului cat si in cadrul serverului, pentru a asocia 
+un port socketului vom folosi comanda bind.
+	Folosesc apeluri ale functiei select in cadrul serverului pentru a controla 
+accesul la diferiti socketi/descriptori de fisiere. Aceasta va primi ca parametri: 
+fdmax - reprezentand valoarea cea mai mare a unui descriptor si temp_fds - 
+reprezentand multimea de descriptori de citire. Ceilalti parametri vor fi setati 
+la NULL deoarece nu ne intereseaza. 
+	Tot in cadrul serverului, folosindu-ma de functia accept, creez un nou 
+socket ce va fi folosit pentru a ma conecta cu clientul ce a facut in prealabil 
+o cerere. Aceasta cerere va fi creata folosind functia connect asociata clientului. 
+Functia connect va primi ca parametri descriptorul/socketul de pe care comunic, 
+dar si serv_addr ce contine portul si adresa IP a serverului.
+	In continuare voi prezenta cum au fost realizate diversele comenzi. In 
+acest sens, parcurg (in server) multimea de descriptori de fisier/socketii prin 
+care vorbesc cu clientii.
+	Comenzi primite de server:
+-------------------------------------------------------------------------------
+	quit-> Aceasta este singura comanda pe care serverul o poate primi. In 
+urma acesteia el isi va inchide socketul si procesul va fi inchis. Astfel, orice 
+comanda introdusa in client la pasul urmator va semnala faptul ca serverul a 
+fost deconectat. De aceea, am adaugat in client cate o verificare la primirea de 
+date de la server. In cazul in care acesta a fost deconectat, valoarea lui 
+checkRecv va fi negativa si in acest sens, clientul va sti ca trebuie sa inchida 
+si el sesiunea, impreuna cu socketul si fisierul de iesire in care sunt scrise 
+mesajele primite.
+	Comenzi primite de client:
+-------------------------------------------------------------------------------
+	login-> Clientul trimite catre server comanda login impreuna cu parametrii 
+acesteia, numarul cardului si pin-ul. Inainte de a face acest lucru, va verifica 
+daca nu exista deja o sesiune deschisa (nu este conectat un alt user de pe 
+acelasi client), asigurandu-se ca variabila isLogged este setata la false. 
+Serverul va face prelucrarea datelor, verificand mai intai daca numarul cardului 
+exista in baza sa de date(folosind functia searchUsersListByCard) si apoi daca PIN-ul
+introdus este corect. Daca ambele cerinte sunt indeplinite, serverul va trimite  
+numele si prenumele userului ce a cerut sa se logheze pentru a forma mesajul de 
+tipul "Welcome nume prenume". De fiecare data cand un nou user se logheaza de pe 
+un client pe server, va fi adaugata o noua copie a acestuia, din usersList in lista 
+loggedUsers. In cazul in care se va introduce un cod PIN gresit de 3 ori consecutiv 
+pentru acelasi user, cardul acestuia va fi imediat blocat. La fiecare introducere 
+gresita a codului PIN clientul va fi instiintat, mesajul de eroare ce sugereaza 
+acest lucru aparand atat la consola cat si in fisierul de iesire.
+-------------------------------------------------------------------------------
+	quit-> Clientul va trimite mesajul "quit" catre server pentru a-l anunta 
+ca va incheia conexiunea/se va deconecta. In acest sens, serverul va deloga 
+userul logat pe client (in cazul in care exista unul) si va inchide transmisiunea 
+cu acesta. In final, clientul va receptiona mesajul serverului, il va afisa si 
+il va scrie in fisier si apoi isi va inchide socketul. 
+	!!! - !!! OBSERVATIE: am considerat ca aceasta comanda poate fi trimisa de
+pe client fara ca un user sa fie logat pe el (nu se va afisa niciodata eroarea -1 
+pentru aceasta comanda).
+-------------------------------------------------------------------------------
+	Pentru urmatoarele comenzi, clientul va verifica mai intai daca un user 
+este logat, afisand eroare de tipul -1 in caz contrar.	
+-------------------------------------------------------------------------------
+	logout-> Clientul trimite comanda de tipul "logout" catre server. Acesta 
+va cauta userul logat in acel moment pe client, ii va actualiza variabila logged 
+la false si apoi il va sterge din lista loggedUsers, trimitand un mesaj corespunzator 
+catre client.
+-------------------------------------------------------------------------------
+	listsold-> Dupa ce primeste aceasta comanda de la client, serverul cauta 
+in lista de useri logati un user ce are acelasi nrSocket cu socketul de pe care 
+a venit comanda. Atunci cand il gaseste, memoreaza valorea soldului pe care acesta 
+il are in lista usersList intr-o variabila de tipul float si o trimite catre client 
+pentru a fi afisata si scrisa in fisier.
+-------------------------------------------------------------------------------
+	getmoney-> La fel ca in cazul listsold, serverul cauta un user in lista 
+loggedUsers ce are acelasi numar de socket cu cel de pe care a venit comanda. 
+Atunci cand gaseste unul ce indeplineste aceasta cerinta, verifica daca din 
+soldul lui poate fi retrasa valoarea primita ca parametru de comanda getmoney si 
+daca aceasta valoarea este multiplu de 10. Daca cele doua cerinte sunt indeplinite, 
+soldul va fi modificat, in caz contrar afisandu-se un mesaj de eroare specific: 
+-8 sau -9.
+-------------------------------------------------------------------------------
+	putmoney-> Implementarea acestei comenzi este asematoare cu cea a 
+ultimelor doua prezentate. Dupa ce primeste comanda de la client, serverul va 
+cauta in lista de useri logati un user ce are asociat acelasi numar de socket 
+cu cel de pe care a venit comanda. Atunci cand il gaseste, adauga la soldul 
+existent suma primita ca parametru de comanda putmoney. In final, clientul va 
+afisa si va scrie in fisier un mesaj prin care anunta ca depunerea a avut loc 
+cu succes.
+-------------------------------------------------------------------------------
